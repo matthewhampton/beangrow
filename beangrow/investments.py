@@ -484,7 +484,7 @@ def write_account_file(dcontext: display_context.DisplayContext,
 
 def cash_flows_to_table(cash_flows: List[CashFlow]) -> pandas.DataFrame:
     """Flatten a list of cash flows to an HTML table string."""
-    import reports
+    from beangrow import reports
     header = ["date", "amount", "currency", "is_dividend", "source", "investment"]
     rows = []
     for flow in cash_flows:
