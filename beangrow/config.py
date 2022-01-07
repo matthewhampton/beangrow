@@ -42,6 +42,15 @@ def read_config(config_filename: str,
     config = Config()
     with open(config_filename, "r") as infile:
         text_format.Merge(infile.read(), config)
+
+    return post_process_config(config, filter_reports, accounts)
+
+def post_process_config(config: Config, 
+                        filter_reports: List[str],
+                        accounts: List[Account]) -> Config:
+    """Perform globbing expansions, and whittle down the
+    list of reports and investments to the requested minimal."""
+
     reports = list(config.groups.group)
 
     # Expand account names.
