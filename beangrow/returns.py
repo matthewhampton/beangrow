@@ -192,7 +192,8 @@ def truncate_and_merge_cash_flows(
 
 
 def compute_portfolio_values(price_map: prices.PriceMap,
-                             transactions: data.Entries) -> Tuple[List[Date], List[float]]:
+                             transactions: data.Entries,
+                             target_currency: Optional[Currency] = None) -> Tuple[List[Date], List[float]]:
     """Compute a serie of portfolio values over time."""
 
     # Infer the list of required prices.
@@ -226,7 +227,7 @@ def compute_portfolio_values(price_map: prices.PriceMap,
 
         # Convert to market value.
         value_balance = balance.reduce(convert.get_value, price_map, date)
-        cost_balance = value_balance.reduce(convert.convert_position, "USD", price_map)
+        cost_balance = value_balance.reduce(convert.convert_position, target_currency or "USD", price_map, date)
         pos = cost_balance.get_only_position()
         value = pos.units.number if pos else ZERO
 

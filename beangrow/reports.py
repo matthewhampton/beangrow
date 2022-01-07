@@ -35,6 +35,7 @@ from beancount.core import data
 from beancount.core import prices
 from beancount.core.amount import Amount
 from beancount.parser import printer
+from beancount.core import convert
 
 from beangrow.config_pb2 import Config, Group
 from beangrow.investments import AccountData
@@ -197,7 +198,7 @@ def write_returns_html(dirname: str,
 
         # Note: This is where the vast majority of the time is spent.
         plots = plot_flows(dirname, pricer.price_map,
-                           cash_flows, transactions, returns.total)
+                           cash_flows, transactions, returns.total, target_currency)
         fprint('<img src={} style="width: 100%"/>'.format(plots["flows"]))
         fprint('<img src={} style="width: 100%"/>'.format(plots["cumvalue"]))
 
@@ -216,7 +217,7 @@ def write_returns_html(dirname: str,
         fprint("<p>", render_table(table, floatfmt="{:.1%}", classes=["full"]), "</p>")
 
         fprint('<h2 class="new-page">Accounts</h2>')
-        fprint("<p>Cost Currency: {}</p>".format(target_currency))
+        fprint("<p>Report Currency: {}</p>".format(target_currency))
         accounts_df = get_accounts_table(account_data)
         fprint(accounts_df.to_html())
 
@@ -330,7 +331,8 @@ def plot_flows(output_dir: str,
                price_map: prices.PriceMap,
                flows: List[CashFlow],
                transactions: data.Entries,
-               returns_rate: float) -> Dict[str, str]:
+               returns_rate: float,
+               target_currency: Optional[Currency] = None) -> Dict[str, str]:
     """Produce plots from cash flows and returns, and more."""
 
     # Render cash flows.
@@ -371,7 +373,10 @@ def plot_flows(output_dir: str,
         rate = (1 + returns_rate) ** (1./365)
         for flow in flows:
             remaining_days = (date_max - flow.date).days
-            amt = -float(flow.amount.number)
+            if target_currency:
+                amt = -float(convert.convert_amount(flow.amount, target_currency, price_map, date=flow.date).number)
+            else:
+                amt = -float(flow.amount.number)
             if remaining_days > 0:
                 gflow = amt * (rate ** np.arange(0, remaining_days))
                 gamounts[-remaining_days:] += gflow
@@ -387,7 +392,7 @@ def plot_flows(output_dir: str,
         ax.plot(dates_all, gamounts, color='#000', alpha=0.7, linewidth=lw)
 
     # Overlay value of assets over time.
-    value_dates, value_values = returnslib.compute_portfolio_values(price_map, transactions)
+    value_dates, value_values = returnslib.compute_portfolio_values(price_map, transactions, target_currency)
     ax.plot(value_dates, value_values, color='#00F', alpha=0.5, linewidth=lw)
     ax.scatter(value_dates, value_values, color='#00F', alpha=lw, s=2)
 
