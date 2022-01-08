@@ -12,6 +12,7 @@ import itertools
 import typing
 
 import numpy as np
+import pandas
 from scipy.optimize import fsolve
 
 from beancount.core import convert
@@ -105,6 +106,19 @@ Returns = typing.NamedTuple("Returns", [
     ("flows", List[CashFlow]),
 ])
 
+def returns_to_dataframe(returns_list: List[Returns]) -> pandas.DataFrame:
+    header = ["first_date", "last_date", "years", "total", "exdiv", "div"]
+    rows = []
+    index = []
+    for returns in returns_list:
+        index.append(returns.groupname)
+        rows.append((returns.first_date,
+                     returns.last_date,
+                     returns.years,
+                     returns.total,
+                     returns.exdiv,
+                     returns.div))
+    return pandas.DataFrame(columns=header, data=rows, index=index)
 
 def compute_returns(flows: List[CashFlow],
                     pricer: Pricer,
