@@ -109,10 +109,11 @@ Returns = typing.NamedTuple("Returns", [
 def compute_returns(flows: List[CashFlow],
                     pricer: Pricer,
                     target_currency: Currency,
-                    end_date: Date) -> Returns:
+                    end_date: Date,
+                    groupname: Optional[str] = None) -> Returns:
     """Compute the returns from a list of cash flows."""
     if not flows:
-        return Returns("?", Date.today(), Date.today(), 0, 0, 0, 0, [])
+        return Returns(groupname or "?", Date.today(), Date.today(), 0, 0, 0, 0, [])
 
     flows = sorted(flows, key=lambda cf: cf.date)
     irr = compute_irr(flows, pricer, target_currency, end_date)
@@ -123,7 +124,7 @@ def compute_returns(flows: List[CashFlow],
     first_date = flows[0].date
     last_date = flows[-1].date
     years = (last_date - first_date).days / 365
-    return Returns("?", first_date, last_date, years,
+    return Returns(groupname or "?", first_date, last_date, years,
                    irr, irr_exdiv, (irr - irr_exdiv),
                    flows)
 
