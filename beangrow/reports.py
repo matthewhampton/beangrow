@@ -42,7 +42,7 @@ from beangrow.investments import AccountData
 from beangrow.investments import CashFlow
 from beangrow import investments
 from beangrow import returns as returnslib
-from beangrow.returns import Pricer
+from beangrow.returns import Pricer, Returns
 
 
 # Basic type aliases.
@@ -129,22 +129,31 @@ def render_table(table: Table,
 Interval = Tuple[str, Date, Date]
 
 
+def _compute_returns_with_table(pricer: Pricer,
+                          target_currency: Currency,
+                          account_data: List[AccountData],
+                          intervals: List[Interval]):
+    """Compute a table of sequential returns, and return the raw Returns objects as well."""
+    header = ["Return"]
+    rows = [["Total"], ["Ex-div"], ["Div"]]
+    returns_list = []
+    for intname, date1, date2 in intervals:
+        header.append(intname)
+        cash_flows = returnslib.truncate_and_merge_cash_flows(pricer, account_data,
+                                                              date1, date2)
+        returns = returnslib.compute_returns(cash_flows, pricer, target_currency, date2, groupname=intname)
+        returns_list.append(returns)
+        rows[0].append(returns.total)
+        rows[1].append(returns.exdiv)
+        rows[2].append(returns.div)
+    return Table(header, rows), returns_list
+
 def compute_returns_table(pricer: Pricer,
                           target_currency: Currency,
                           account_data: List[AccountData],
                           intervals: List[Interval]):
     """Compute a table of sequential returns."""
-    header = ["Return"]
-    rows = [["Total"], ["Ex-div"], ["Div"]]
-    for intname, date1, date2 in intervals:
-        header.append(intname)
-        cash_flows = returnslib.truncate_and_merge_cash_flows(pricer, account_data,
-                                                              date1, date2)
-        returns = returnslib.compute_returns(cash_flows, pricer, target_currency, date2)
-        rows[0].append(returns.total)
-        rows[1].append(returns.exdiv)
-        rows[2].append(returns.div)
-    return Table(header, rows)
+    return _compute_returns_with_table(pricer, target_currency, account_data, intervals)[0]
 
 
 def write_returns_pdf(pdf_filename: str, *args, **kwargs) -> subprocess.Popen:
@@ -229,6 +238,60 @@ def write_returns_html(dirname: str,
 
     return indexfile.name
 
+
+
+ReportData = typing.NamedTuple("ReportData", [
+    ("total_returns", Returns),
+    ("calendar_returns", List[Returns]),
+    ("cumulative_returns", List[Returns]),
+    ("cash_flows", List[CashFlow]),
+    ("cash_flows_excluding_dividends", pandas.Series),
+    ("cash_flows_dividends", pandas.Series),
+    ("flow_value", pandas.Series),
+    ("flow_amortized_value", pandas.Series),
+    ("portfolio_value", pandas.Series),
+    
+])
+
+def compute_report_data(pricer,
+                       account_data,
+                       end_date,
+                       target_currency):
+    cash_flows = flows = returnslib.truncate_and_merge_cash_flows(pricer, account_data, None, end_date)
+    total_returns = returnslib.compute_returns(cash_flows, pricer, target_currency, end_date, groupname="Total")
+    transactions = data.sorted([txn for ad in account_data for txn in ad.transactions])
+    
+    calendar_returns = _compute_returns_with_table(pricer, target_currency, account_data, get_calendar_intervals(end_date))[1]
+    cumulative_returns = _compute_returns_with_table(pricer, target_currency, account_data, get_cumulative_intervals(end_date))[1]
+    
+    dates = [f.date for f in flows]
+    dates_exdiv = [f.date for f in flows if not f.is_dividend]
+    dates_div = [f.date for f in flows if f.is_dividend]
+    amounts_exdiv = np.array([f.amount.number for f in flows if not f.is_dividend])
+    amounts_div = np.array([f.amount.number for f in flows if f.is_dividend])
+    cash_flows_excluding_dividends = pandas.Series(amounts_exdiv, index=dates_exdiv)
+    cash_flows_dividends = pandas.Series(amounts_div, index=dates_div)
+
+    dates_flow, amounts_flow = get_amortized_value_plot_data_from_flows(pricer.price_map, cash_flows, 0, target_currency, dates)
+    flow_value = pandas.Series(amounts_flow, index=dates_flow)
+
+    dates_amortized, amounts_amortized = get_amortized_value_plot_data_from_flows(pricer.price_map, cash_flows, total_returns.total, target_currency, dates)
+    flow_amortized_value = pandas.Series(amounts_amortized, index=dates_amortized)
+    
+    dates_value, amounts_value = returnslib.compute_portfolio_values(pricer.price_map, transactions, target_currency)
+    portfolio_value = pandas.Series(amounts_value, index=dates_value)
+
+    return ReportData(
+        total_returns,
+        calendar_returns,
+        cumulative_returns,
+        cash_flows,
+        cash_flows_excluding_dividends,
+        cash_flows_dividends,
+        flow_value,
+        flow_amortized_value,
+        portfolio_value
+    )
 
 def write_returns_debugfile(filename: str,
                             pricer: Pricer,
@@ -327,6 +390,26 @@ def plot_prices(output_dir: str,
     return outplots
 
 
+def get_amortized_value_plot_data_from_flows(price_map, flows, returns_rate, target_currency, dates):
+    date_min = dates[0] - datetime.timedelta(days=1)
+    date_max = dates[-1]
+    num_days = (date_max - date_min).days
+    dates_all = [dates[0] + datetime.timedelta(days=x) for x in range(num_days)]
+    gamounts = np.zeros(num_days)
+    rate = (1 + returns_rate) ** (1./365)
+    for flow in flows:
+        remaining_days = (date_max - flow.date).days
+        if target_currency:
+            amt = -float(convert.convert_amount(flow.amount, target_currency, price_map, date=flow.date).number)
+        else:
+            amt = -float(flow.amount.number)
+        if remaining_days > 0:
+            gflow = amt * (rate ** np.arange(0, remaining_days))
+            gamounts[-remaining_days:] += gflow
+        else:
+            gamounts[-1] += amt
+    return dates_all, gamounts
+
 def plot_flows(output_dir: str,
                price_map: prices.PriceMap,
                flows: List[CashFlow],
@@ -365,23 +448,7 @@ def plot_flows(output_dir: str,
     # Render cumulative cash flows, with returns growth.
     lw = 0.8
     if dates:
-        date_min = dates[0] - datetime.timedelta(days=1)
-        date_max = dates[-1]
-        num_days = (date_max - date_min).days
-        dates_all = [dates[0] + datetime.timedelta(days=x) for x in range(num_days)]
-        gamounts = np.zeros(num_days)
-        rate = (1 + returns_rate) ** (1./365)
-        for flow in flows:
-            remaining_days = (date_max - flow.date).days
-            if target_currency:
-                amt = -float(convert.convert_amount(flow.amount, target_currency, price_map, date=flow.date).number)
-            else:
-                amt = -float(flow.amount.number)
-            if remaining_days > 0:
-                gflow = amt * (rate ** np.arange(0, remaining_days))
-                gamounts[-remaining_days:] += gflow
-            else:
-                gamounts[-1] += amt
+        dates_all, gamounts = get_amortized_value_plot_data_from_flows(price_map, flows, returns_rate, target_currency, dates)
 
         fig, ax = plt.subplots(figsize=[10, 4])
         ax.set_title("Cumulative value")
@@ -405,6 +472,7 @@ def plot_flows(output_dir: str,
     plt.close(fig)
 
     return outplots
+
 
 
 def write_price_directives(filename: str,
