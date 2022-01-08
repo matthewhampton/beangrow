@@ -241,16 +241,14 @@ def write_returns_html(dirname: str,
 
 
 ReportData = typing.NamedTuple("ReportData", [
-    ("total_returns", Returns),
-    ("calendar_returns", List[Returns]),
-    ("cumulative_returns", List[Returns]),
-    ("cash_flows", List[CashFlow]),
+    ("total_returns", pandas.DataFrame),
+    ("calendar_returns", pandas.DataFrame),
+    ("cumulative_returns", pandas.DataFrame),
     ("cash_flows_excluding_dividends", pandas.Series),
     ("cash_flows_dividends", pandas.Series),
     ("flow_value", pandas.Series),
     ("flow_amortized_value", pandas.Series),
     ("portfolio_value", pandas.Series),
-    
 ])
 
 def compute_report_data(pricer,
@@ -282,10 +280,9 @@ def compute_report_data(pricer,
     portfolio_value = pandas.Series(amounts_value, index=dates_value)
 
     return ReportData(
-        total_returns,
-        calendar_returns,
-        cumulative_returns,
-        cash_flows,
+        returnslib.returns_to_dataframe([total_returns]),
+        returnslib.returns_to_dataframe(calendar_returns),
+        returnslib.returns_to_dataframe(cumulative_returns),
         cash_flows_excluding_dividends,
         cash_flows_dividends,
         flow_value,
@@ -407,7 +404,7 @@ def get_amortized_value_plot_data_from_flows(price_map, flows, returns_rate, tar
             gflow = amt * (rate ** np.arange(0, remaining_days))
             gamounts[-remaining_days:] += gflow
         else:
-            gamounts[-1] += amt
+                gamounts[-1] += amt
     return dates_all, gamounts
 
 def plot_flows(output_dir: str,
