@@ -241,6 +241,7 @@ def write_returns_html(dirname: str,
 
 
 ReportData = typing.NamedTuple("ReportData", [
+    ("cash_flows", pandas.DataFrame),
     ("total_returns", pandas.DataFrame),
     ("calendar_returns", pandas.DataFrame),
     ("cumulative_returns", pandas.DataFrame),
@@ -279,7 +280,23 @@ def compute_report_data(pricer,
     dates_value, amounts_value = returnslib.compute_portfolio_values(pricer.price_map, transactions, target_currency)
     portfolio_value = pandas.Series(amounts_value, index=dates_value)
 
+    header = ["date", "amount", "original_amount", "original_currency", "is_dividend", "source", "investment"]
+    rows = []
+    for flow in flows:
+        if flow.source == 'simulated-close':
+            continue
+        amt = float(convert.convert_amount(flow.amount, target_currency, pricer.price_map, date=flow.date).number)
+        rows.append((flow.date,
+                    amt,
+                    float(flow.amount.number),
+                    flow.amount.currency,
+                    flow.is_dividend,
+                    flow.source,
+                    flow.account))
+    cash_flows_df = pandas.DataFrame(columns=header, data=rows)
+
     return ReportData(
+        cash_flows_df,
         returnslib.returns_to_dataframe([total_returns]),
         returnslib.returns_to_dataframe(calendar_returns),
         returnslib.returns_to_dataframe(cumulative_returns),
