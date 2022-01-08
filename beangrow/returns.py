@@ -162,7 +162,7 @@ def truncate_cash_flows(
             if cost_position:
                 start_flows.append(
                     CashFlow(date_start, -cost_position.units, False,
-                             "open", account_data.account))
+                             "simulated-open", account_data.account))
 
     if date_end is not None:
         # Truncate after the end date.
@@ -175,7 +175,7 @@ def truncate_cash_flows(
             if cost_position:
                 end_flows.append(
                     CashFlow(date_end, cost_position.units, False,
-                             "close", account_data.account))
+                             "simulated-close", account_data.account))
 
     # Compute truncated flows.
     truncated_flows = []

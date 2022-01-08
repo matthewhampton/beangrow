@@ -404,6 +404,7 @@ def get_amortized_value_plot_data_from_flows(price_map, flows, returns_rate, tar
             gflow = amt * (rate ** np.arange(0, remaining_days))
             gamounts[-remaining_days:] += gflow
         else:
+            if flow.source != 'simulated-close':
                 gamounts[-1] += amt
     return dates_all, gamounts
 
