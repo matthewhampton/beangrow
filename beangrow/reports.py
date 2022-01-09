@@ -242,11 +242,7 @@ def write_returns_html(dirname: str,
 
 ReportData = typing.NamedTuple("ReportData", [
     ("cash_flows", pandas.DataFrame),
-    ("total_returns", pandas.DataFrame),
-    ("calendar_returns", pandas.DataFrame),
-    ("cumulative_returns", pandas.DataFrame),
-    ("cash_flows_excluding_dividends", pandas.Series),
-    ("cash_flows_dividends", pandas.Series),
+    ("returns", pandas.DataFrame),
     ("flow_value", pandas.Series),
     ("flow_amortized_value", pandas.Series),
     ("portfolio_value", pandas.Series),
@@ -264,12 +260,6 @@ def compute_report_data(pricer,
     cumulative_returns = _compute_returns_with_table(pricer, target_currency, account_data, get_cumulative_intervals(end_date))[1]
     
     dates = [f.date for f in flows]
-    dates_exdiv = [f.date for f in flows if not f.is_dividend]
-    dates_div = [f.date for f in flows if f.is_dividend]
-    amounts_exdiv = np.array([f.amount.number for f in flows if not f.is_dividend])
-    amounts_div = np.array([f.amount.number for f in flows if f.is_dividend])
-    cash_flows_excluding_dividends = pandas.Series(amounts_exdiv, index=dates_exdiv)
-    cash_flows_dividends = pandas.Series(amounts_div, index=dates_div)
 
     dates_flow, amounts_flow = get_amortized_value_plot_data_from_flows(pricer.price_map, cash_flows, 0, target_currency, dates)
     flow_value = pandas.Series(amounts_flow, index=dates_flow)
@@ -297,11 +287,7 @@ def compute_report_data(pricer,
 
     return ReportData(
         cash_flows_df,
-        returnslib.returns_to_dataframe([total_returns]),
-        returnslib.returns_to_dataframe(calendar_returns),
-        returnslib.returns_to_dataframe(cumulative_returns),
-        cash_flows_excluding_dividends,
-        cash_flows_dividends,
+        returnslib.returns_to_dataframe(calendar_returns+cumulative_returns+[total_returns]),
         flow_value,
         flow_amortized_value,
         portfolio_value
