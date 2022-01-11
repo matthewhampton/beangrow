@@ -147,7 +147,8 @@ def truncate_cash_flows(
         pricer: Pricer,
         account_data: AccountData,
         date_start: Optional[Date],
-        date_end: Optional[Date]) -> List[CashFlow]:
+        date_end: Optional[Date],
+        additional_cash_flows: Optional[List[CashFlow]]) -> List[CashFlow]:
     """Truncate the cash flows for the given account data."""
 
     start_flows = []
@@ -179,7 +180,7 @@ def truncate_cash_flows(
 
     # Compute truncated flows.
     truncated_flows = []
-    for flow in account_data.cash_flows:
+    for flow in account_data.cash_flows+(additional_cash_flows or []):
         if date_start and flow.date < date_start:
             continue
         if date_end and flow.date >= date_end:
@@ -189,7 +190,8 @@ def truncate_cash_flows(
     cash_flows = start_flows + truncated_flows + end_flows
 
     cash_flows_dates = [cf.date for cf in cash_flows]
-    assert cash_flows_dates == sorted(cash_flows_dates)
+    if not additional_cash_flows:
+        assert cash_flows_dates == sorted(cash_flows_dates)
     return cash_flows
 
 
@@ -197,11 +199,13 @@ def truncate_and_merge_cash_flows(
         pricer: Pricer,
         account_data_list: List[AccountData],
         date_start: Optional[Date],
-        date_end: Optional[Date]) -> List[CashFlow]:
+        date_end: Optional[Date],
+        additional_cash_flows: Optional[List[CashFlow]]=None) -> List[CashFlow]:
     """Truncate and merge the cash flows for given list of account data."""
     cash_flows = []
     for ad in account_data_list:
-        cash_flows.extend(truncate_cash_flows(pricer, ad, date_start, date_end))
+        cash_flows.extend(truncate_cash_flows(pricer, ad, date_start, date_end, additional_cash_flows))
+        additional_cash_flows = None #Only merge these for the first one!
     cash_flows.sort(key=lambda item: item[0])
     return cash_flows
 

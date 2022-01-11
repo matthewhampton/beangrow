@@ -251,8 +251,11 @@ ReportData = typing.NamedTuple("ReportData", [
 def compute_report_data(pricer,
                        account_data,
                        end_date,
-                       target_currency):
-    cash_flows = flows = returnslib.truncate_and_merge_cash_flows(pricer, account_data, None, end_date)
+                       target_currency,
+                       additional_cash_flows: Optional[List[Tuple[Date, Amount, Account]]]=None):
+    
+    additional_cash_flows = [CashFlow(d,amt,False,"additional",ac) for (d, amt, ac) in (additional_cash_flows or [])]
+    cash_flows = flows = returnslib.truncate_and_merge_cash_flows(pricer, account_data, None, end_date, additional_cash_flows=additional_cash_flows)
     total_returns = returnslib.compute_returns(cash_flows, pricer, target_currency, end_date, groupname="Total")
     transactions = data.sorted([txn for ad in account_data for txn in ad.transactions])
     
