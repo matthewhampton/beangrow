@@ -264,10 +264,10 @@ def compute_report_data(pricer,
     
     dates = [f.date for f in flows]
 
-    dates_flow, amounts_flow = get_amortized_value_plot_data_from_flows(pricer.price_map, cash_flows, 0, target_currency, dates)
+    dates_flow, amounts_flow = run_benchmark(cash_flows, dates, target_currency, pricer.price_map, 0)
     flow_value = pandas.Series(amounts_flow, index=dates_flow)
 
-    dates_amortized, amounts_amortized = get_amortized_value_plot_data_from_flows(pricer.price_map, cash_flows, total_returns.total, target_currency, dates)
+    dates_amortized, amounts_amortized = run_benchmark(cash_flows, dates, target_currency, pricer.price_map, total_returns.total) 
     flow_amortized_value = pandas.Series(amounts_amortized, index=dates_amortized)
     
     dates_value, amounts_value = returnslib.compute_portfolio_values(pricer.price_map, transactions, target_currency)
@@ -392,6 +392,33 @@ def plot_prices(output_dir: str,
 
     return outplots
 
+def run_benchmark(flows, dates, target_currency, price_map, returns_rate=None, benchmark_commodity=None):
+    date_min = dates[0] - datetime.timedelta(days=1)
+    date_max = dates[-1]
+    num_days = (date_max - date_min).days
+    dates_all = [dates[0] + datetime.timedelta(days=x) for x in range(num_days)]
+
+    if benchmark_commodity:
+        #TODO: calculate benchmark_daily_returns dataframe
+        benchmark_daily_returns = None
+    else:
+        target_daily_return = (1 + returns_rate) ** (1./365)
+    benchmark_current = 0
+    benchmark_values = []
+    i = 0
+    for d in dates_all:
+        if benchmark_commodity:
+            benchmark_current = benchmark_current * (1.0+benchmark_daily_returns.loc[d])
+        else:
+            benchmark_current = benchmark_current*target_daily_return
+
+        while i < len(flows) and flows[i].date <= d:
+            if flows[i].source != 'simulated-close':
+                benchmark_current += -float(convert.convert_amount(flows[i].amount, target_currency, price_map, date=flows[i].date).number)
+            i+=1
+
+        benchmark_values.append(benchmark_current)
+    return dates_all, benchmark_values
 
 def get_amortized_value_plot_data_from_flows(price_map, flows, returns_rate, target_currency, dates):
     date_min = dates[0] - datetime.timedelta(days=1)
