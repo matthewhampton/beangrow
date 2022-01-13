@@ -245,7 +245,7 @@ ReportData = typing.NamedTuple("ReportData", [
     ("returns", pandas.DataFrame),
     ("flow_value", pandas.Series),
     ("flow_amortized_value", pandas.Series),
-    ("flow_benchmark_value", pandas.Series),
+    ("benchmark_values", List[pandas.Series]),
     ("portfolio_value", pandas.Series),
 ])
 
@@ -253,7 +253,7 @@ def compute_report_data(pricer,
                        account_data,
                        end_date,
                        target_currency,
-                       benchmark_commodity: Optional[str]=None,
+                       benchmarks: Optional[List[Tuple[str, float]]]=None,
                        additional_cash_flows: Optional[List[Tuple[Date, Amount, Account]]]=None):
     
     additional_cash_flows = [CashFlow(d,amt,False,"additional",ac) for (d, amt, ac) in (additional_cash_flows or [])]
@@ -272,11 +272,10 @@ def compute_report_data(pricer,
     dates_amortized, amounts_amortized = run_benchmark(cash_flows, dates, target_currency, pricer.price_map, total_returns.total) 
     flow_amortized_value = pandas.Series(amounts_amortized, index=dates_amortized)
 
-    if benchmark_commodity:
-        dates_benchmark, amounts_benchmark = run_benchmark(cash_flows, dates, target_currency, pricer.price_map, benchmark_commodity=benchmark_commodity) 
-        flow_benchmark_value = pandas.Series(amounts_benchmark, index=dates_benchmark)
-    else:
-        flow_benchmark_value = None
+    benchmark_values = []
+    for benchmark_commodity, additional_returns_rate in (benchmarks or []):
+        dates_benchmark, amounts_benchmark = run_benchmark(cash_flows, dates, target_currency, pricer.price_map, benchmark_commodity=benchmark_commodity, returns_rate=additional_returns_rate) 
+        benchmark_values.append(pandas.Series(amounts_benchmark, index=dates_benchmark))
     
     dates_value, amounts_value = returnslib.compute_portfolio_values(pricer.price_map, transactions, target_currency)
     portfolio_value = pandas.Series(amounts_value, index=dates_value)
@@ -301,7 +300,7 @@ def compute_report_data(pricer,
         returnslib.returns_to_dataframe(calendar_returns+cumulative_returns+[total_returns]),
         flow_value,
         flow_amortized_value,
-        flow_benchmark_value,
+        benchmark_values,
         portfolio_value
     )
 
@@ -407,6 +406,8 @@ def run_benchmark(flows, dates, target_currency, price_map, returns_rate=None, b
     num_days = (date_max - date_min).days
     dates_all = [dates[0] + datetime.timedelta(days=x) for x in range(num_days)]
 
+    target_daily_return = (1 + returns_rate) ** (1./365) if returns_rate else 1
+
     if benchmark_commodity:
         bench_dates, bench_prices = zip(*prices.get_all_prices(price_map, (benchmark_commodity, target_currency)))
         bench_dates = pandas.DatetimeIndex(pandas.to_datetime(bench_dates))
@@ -420,16 +421,15 @@ def run_benchmark(flows, dates, target_currency, price_map, returns_rate=None, b
         benchmark_df = benchmark_df.resample("D")
         benchmark_df = benchmark_df.interpolate(method='linear')
         benchmark_df['daily_returns'] = benchmark_df['price'].pct_change()
-    else:
-        target_daily_return = (1 + returns_rate) ** (1./365)
+        
     benchmark_current = 0
     benchmark_values = []
     i = 0
     for d in dates_all:
         if benchmark_commodity:
             benchmark_current = benchmark_current * (1.0+benchmark_df.loc[pandas.to_datetime(d), "daily_returns"])
-        else:
-            benchmark_current = benchmark_current*target_daily_return
+        
+        benchmark_current = benchmark_current*target_daily_return
 
         while i < len(flows) and flows[i].date <= d:
             if flows[i].source != 'simulated-close':
