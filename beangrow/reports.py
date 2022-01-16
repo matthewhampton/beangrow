@@ -245,15 +245,14 @@ ReportData = typing.NamedTuple("ReportData", [
     ("returns", pandas.DataFrame),
     ("flow_value", pandas.Series),
     ("flow_amortized_value", pandas.Series),
-    ("benchmark_values", List[pandas.Series]),
     ("portfolio_value", pandas.Series),
+    ("benchmark_func", callable),
 ])
 
 def compute_report_data(pricer,
                        account_data,
                        end_date,
                        target_currency,
-                       benchmarks: Optional[List[Tuple[str, float]]]=None,
                        additional_cash_flows: Optional[List[Tuple[Date, Amount, Account]]]=None):
     
     additional_cash_flows = [CashFlow(d,amt,False,"additional",ac) for (d, amt, ac) in (additional_cash_flows or [])]
@@ -272,10 +271,9 @@ def compute_report_data(pricer,
     dates_amortized, amounts_amortized = run_benchmark(cash_flows, dates, target_currency, pricer.price_map, total_returns.total) 
     flow_amortized_value = pandas.Series(amounts_amortized, index=dates_amortized)
 
-    benchmark_values = []
-    for benchmark_commodity, additional_returns_rate in (benchmarks or []):
+    def benchmark_func(benchmark_commodity, additional_returns_rate):
         dates_benchmark, amounts_benchmark = run_benchmark(cash_flows, dates, target_currency, pricer.price_map, benchmark_commodity=benchmark_commodity, returns_rate=additional_returns_rate) 
-        benchmark_values.append(pandas.Series(amounts_benchmark, index=dates_benchmark))
+        return pandas.Series(amounts_benchmark, index=dates_benchmark)
     
     dates_value, amounts_value = returnslib.compute_portfolio_values(pricer.price_map, transactions, target_currency)
     portfolio_value = pandas.Series(amounts_value, index=dates_value)
@@ -300,8 +298,8 @@ def compute_report_data(pricer,
         returnslib.returns_to_dataframe(calendar_returns+cumulative_returns+[total_returns]),
         flow_value,
         flow_amortized_value,
-        benchmark_values,
-        portfolio_value
+        portfolio_value,
+        benchmark_func
     )
 
 def write_returns_debugfile(filename: str,
