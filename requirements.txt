@@ -2,3 +2,5 @@ beancount
 pandas
 matplotlib
 seaborn
+protobuf<=3.21
+scipy
